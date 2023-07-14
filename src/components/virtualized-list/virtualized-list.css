@@ -1,0 +1,14 @@
+.list-item {
+  width: 100%;
+  position: absolute;
+}
+
+#window {
+  max-height: 500px; /* Adjust as needed */
+  overflow-y: auto;
+}
+
+.scroll-container {
+  position: relative;
+  height: fit-content;
+}
