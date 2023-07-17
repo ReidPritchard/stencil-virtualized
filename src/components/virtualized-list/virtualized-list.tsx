@@ -73,6 +73,16 @@ export class VirtualizedList {
   private animationFrame: number;
 
   /**
+   * A reference to the resize observer
+   */
+  private resizeObserver: ResizeObserver;
+
+  /**
+   * A Map of the observed elements
+   */
+  private observedElements: Map<number, HTMLElement> = new Map();
+
+  /**
    * A helper function to schedule an update when the window is resized
    */
   private debouncedResize = debounce(() => this.scheduleUpdate(), 100);
@@ -84,7 +94,9 @@ export class VirtualizedList {
 
   componentDidLoad() {
     // Now that the containers are rendered, we can calculate the visible items
+    this.setupResizeObserver();
     this.updateVirtualScroll();
+
     this.scheduleUpdate();
   }
 
@@ -93,6 +105,7 @@ export class VirtualizedList {
     if (this.animationFrame) {
       window.cancelAnimationFrame(this.animationFrame);
     }
+    this.resizeObserver.disconnect();
   }
 
   /**
@@ -119,6 +132,23 @@ export class VirtualizedList {
   }
 
   /**
+   * This is a helper function to setup the resize observer
+   */
+  private setupResizeObserver() {
+    this.resizeObserver = new ResizeObserver(entries => {
+      for (let entry of entries) {
+        const target = entry.target as HTMLElement;
+        const index = parseInt(target.dataset.index, 10);
+        const height = entry.contentRect.height;
+
+        console.log('item height changed', index, height);
+
+        this.virtualScroll.updateItemHeight(index, height);
+      }
+    });
+  }
+
+  /**
    * This is the main function that is called to update the visible items
    * The virtual scroll instance is used to perform the calculations
    */
@@ -141,7 +171,19 @@ export class VirtualizedList {
               <div
                 class={HTMLClasses.listItem}
                 style={{ transform: `translateY(${top}px)` }}
-                ref={el => this.updateItemHeight(index, el)}
+                data-index={index}
+                ref={el => {
+                  if (el) {
+                    this.observedElements.set(index, el);
+                    this.resizeObserver.observe(el);
+                  } else {
+                    const element = this.observedElements.get(index);
+                    if (element) {
+                      this.resizeObserver.unobserve(element);
+                      this.observedElements.delete(index);
+                    }
+                  }
+                }}
               >
                 {this.renderRow ? this.renderRow(item) : item}
               </div>
@@ -164,19 +206,6 @@ export class VirtualizedList {
         this.processVisibleItems();
         this.animationFrame = undefined;
       });
-    }
-  }
-
-  /**
-   * @category private
-   * @description
-   * Update the height of an item in the virtual scroll instance.
-   * This is used to calculate the top value for each item.
-   */
-  private updateItemHeight(index: number, el: HTMLElement) {
-    const currentHeight = el?.getBoundingClientRect().height;
-    if (currentHeight) {
-      this.virtualScroll.updateItemData(index, currentHeight);
     }
   }
 }

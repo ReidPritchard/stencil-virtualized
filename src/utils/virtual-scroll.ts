@@ -106,7 +106,7 @@ export class VirtualScroll<T> {
    * @param index - The index of the item to update.
    * @param height - The new height of the item.
    */
-  public updateItemData(index: number, height: number): void {
+  public updateItemHeight(index: number, height: number): void {
     this.itemHeightTree.update(
       index,
       height - this.itemHeightTree.queryRange(index, index),
