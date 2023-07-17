@@ -11,18 +11,10 @@ import { HTMLClasses, HTMLIds, HTMLQueries, VisibleItem } from './interfaces';
 export class VirtualizedList {
   @Element() host: HTMLElement;
 
+  /**
+   * The items to render
+   */
   @Prop() items: any[] = [];
-
-  @Prop() renderRow?: (item: (typeof this.items)[0]) => HTMLElement;
-
-  @State() visibleItems: VisibleItem<any>[] = [];
-
-  private virtualScroll: VirtualScroll<any>;
-  private contentElement: HTMLElement;
-  private windowElement: HTMLElement;
-  private animationFrame: number;
-
-  private debouncedResize = debounce(() => this.scheduleUpdate(), 100);
 
   @Watch('items')
   itemsChanged(newValue: any[], oldValue: any[]) {
@@ -32,21 +24,68 @@ export class VirtualizedList {
     }
   }
 
+  /**
+   * The number of "padding" items to render above and below the visible items
+   * This can help reduce flickering when scrolling quickly
+   * @default 5
+   */
+  @Prop() paddingItemCount: number = 5;
+
+  /**
+   * The estimated height of each row.
+   * Once the items have rendered, the actual height will be calculated and applied.
+   *
+   * For this example, we'll use 50px even though the actual rows are ~18.5px
+   */
+  @Prop() estimatedRowHeight: number = 50;
+
+  /**
+   * An optional function to render each row
+   * This can be useful if you want to render a different component for specific rows
+   */
+  @Prop() renderRow?: (item: (typeof this.items)[0]) => HTMLElement;
+
+  /**
+   * The rows that are currently visible / within the "window"
+   */
+  @State() visibleItems: VisibleItem<any>[] = [];
+
+  /**
+   * The virtual scroll instance
+   * The majority of the logic is handled by this class
+   */
+  private virtualScroll: VirtualScroll<any>;
+
+  /**
+   * The container element that holds all items in the list
+   * (or at least mimics that behavior)
+   */
+  private contentElement: HTMLElement;
+
+  /**
+   * The viewport element that is used to determine which items are visible
+   */
+  private windowElement: HTMLElement;
+
+  /**
+   * A reference to the animation frame
+   */
+  private animationFrame: number;
+
+  /**
+   * A helper function to schedule an update when the window is resized
+   */
+  private debouncedResize = debounce(() => this.scheduleUpdate(), 100);
+
   componentWillLoad() {
     // Since the container is not rendered yet, we can't calculate the visible items
-    this.visibleItems = [];
     window.addEventListener('resize', this.debouncedResize);
   }
 
   componentDidLoad() {
+    // Now that the containers are rendered, we can calculate the visible items
     this.updateVirtualScroll();
-
-    this.updateScrollContainerHeight();
     this.scheduleUpdate();
-  }
-
-  componentDidRender() {
-    this.animationFrame = undefined;
   }
 
   disconnectedCallback() {
@@ -56,6 +95,12 @@ export class VirtualizedList {
     }
   }
 
+  /**
+   * Since when the component first loads/renders, the containers are not present,
+   * we need to update/re-create the virtual scroll instance once they are
+   * This is a helper to do that
+   * @category private
+   */
   private updateVirtualScroll() {
     this.windowElement =
       this.windowElement ||
@@ -68,37 +113,18 @@ export class VirtualizedList {
       this.items,
       this.windowElement,
       this.contentElement,
+      this.estimatedRowHeight,
+      this.paddingItemCount,
     );
   }
 
+  /**
+   * This is the main function that is called to update the visible items
+   * The virtual scroll instance is used to perform the calculations
+   */
   private processVisibleItems() {
-    if (!this.virtualScroll) return;
-
     const newVisibleItems = this.virtualScroll.calculateVisibleItemsGenerator();
-    let index = 0;
-    let nextItem = newVisibleItems.next();
-    while (!nextItem.done) {
-      if (
-        !this.visibleItems[index] ||
-        this.visibleItems[index].index !== nextItem.value.index
-      ) {
-        // If the item is new or has changed, we know we need to update the rest of the items
-        // However, we don't want to update the entire array, so we only update the items that
-        // are left in the generator (since we know they are new or have changed)
-        this.visibleItems = [
-          ...this.visibleItems.slice(0, index),
-          nextItem.value,
-          ...Array.from(newVisibleItems),
-        ];
-        break;
-      }
-      index++;
-      nextItem = newVisibleItems.next();
-    }
-  }
-
-  private updateScrollContainerHeight() {
-    this.virtualScroll.updateTotalHeight();
+    this.visibleItems = Array.from(newVisibleItems);
   }
 
   private onScroll() {
@@ -107,10 +133,7 @@ export class VirtualizedList {
 
   render() {
     return (
-      <div
-        id={HTMLIds.windowElement}
-        onScroll={debounce(() => this.onScroll(), 10)}
-      >
+      <div id={HTMLIds.windowElement} onScroll={() => this.onScroll()}>
         <div id={HTMLIds.contentElement}>
           {this.visibleItems.map(({ item, index }) => {
             const top = this.virtualScroll?.getItemData(index).top || 0;
@@ -137,9 +160,10 @@ export class VirtualizedList {
   private scheduleUpdate() {
     // Only schedule an update if one is not already scheduled
     if (this.animationFrame === undefined) {
-      this.animationFrame = window.requestAnimationFrame(() =>
-        this.processVisibleItems(),
-      );
+      this.animationFrame = window.requestAnimationFrame(() => {
+        this.processVisibleItems();
+        this.animationFrame = undefined;
+      });
     }
   }
 
@@ -151,9 +175,7 @@ export class VirtualizedList {
    */
   private updateItemHeight(index: number, el: HTMLElement) {
     const currentHeight = el?.getBoundingClientRect().height;
-    const previousHeight = this.virtualScroll.getItemData(index)?.height;
-    console.log('updateItemHeight', index, currentHeight, previousHeight);
-    if (currentHeight && previousHeight !== currentHeight) {
+    if (currentHeight) {
       this.virtualScroll.updateItemData(index, currentHeight);
     }
   }

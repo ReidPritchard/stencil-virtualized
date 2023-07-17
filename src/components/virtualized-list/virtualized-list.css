@@ -1,14 +1,14 @@
-.list-item {
+.virtual-scroll-list-item {
   width: 100%;
   position: absolute;
 }
 
-#window {
+#virtual-scroll-window {
   max-height: 500px; /* Adjust as needed */
   overflow-y: auto;
 }
 
-.scroll-container {
+#virtual-scroll-content {
   position: relative;
   height: fit-content;
 }
