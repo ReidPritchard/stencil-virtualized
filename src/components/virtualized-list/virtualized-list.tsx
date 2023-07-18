@@ -1,6 +1,7 @@
 import { Component, h, Element, State, Watch, Prop } from '@stencil/core';
 import { VirtualScroll } from '../../utils/virtual-scroll';
 import debounce from 'lodash-es/debounce';
+import throttle from 'lodash-es/throttle';
 import { HTMLClasses, HTMLIds, HTMLQueries, VisibleItem } from './interfaces';
 
 @Component({
@@ -87,6 +88,24 @@ export class VirtualizedList {
    */
   private debouncedResize = debounce(() => this.scheduleUpdate(), 100);
 
+  /**
+   * A throttled helper to schedule an update when the window is scrolled
+   * This is throttled to prevent the handler from being overwhelmed (which can cause "missed" resize events)
+   *
+   * A throttle is used rather than a debounce since high refresh rate screens can cause animation frames to be called
+   * more frequently.
+   *
+   * A time of 16.67ms (60fps) is used as a baseline for the throttle. Since most screens are 60hz, this should be
+   * sufficient to prevent the handler from being called too frequently while still being performant. This can be
+   * adjusted based on the performance of the virtual scroll, however anything below 16.67ms will likely end up with
+   * little to no performance gain and even use more resources than necessary (decreasing performance)
+   *
+   * @see https://developer.mozilla.org/en-US/docs/Web/Performance/How_long_is_too_long#animation_goal
+   */
+  private throttledUpdate = throttle(() => this.scheduleUpdate(), 1000 / 60, {
+    trailing: true,
+  });
+
   componentWillLoad() {
     // Since the container is not rendered yet, we can't calculate the visible items
     window.addEventListener('resize', this.debouncedResize);
@@ -158,7 +177,7 @@ export class VirtualizedList {
   }
 
   private onScroll() {
-    this.scheduleUpdate();
+    this.throttledUpdate();
   }
 
   render() {
@@ -173,7 +192,7 @@ export class VirtualizedList {
                 style={{ transform: `translateY(${top}px)` }}
                 data-index={index}
                 ref={el => {
-                  if (el) {
+                  if (el && !this.observedElements.has(index)) {
                     this.observedElements.set(index, el);
                     this.resizeObserver.observe(el);
                   } else {
